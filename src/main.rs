@@ -71,7 +71,7 @@ enum Opt {
         #[structopt(
             short,
             long,
-            name = "COLOUR",
+            name = "COLOURS",
             default_value = "#050a3c #8c2846 #f0c83c #050a3c",
             display_order = 5
         )]
