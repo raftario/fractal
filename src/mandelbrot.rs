@@ -12,17 +12,6 @@ pub struct Area {
     pub y_end: f64,
 }
 
-impl Default for Area {
-    fn default() -> Self {
-        Area {
-            x_start: -2.5,
-            x_end: 1.0,
-            y_start: -1.0,
-            y_end: 1.0,
-        }
-    }
-}
-
 fn f(c: Complex64, z: Complex64) -> Complex64 {
     z.powf(2.0) + c
 }
