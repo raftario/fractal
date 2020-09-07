@@ -1,0 +1,18 @@
+[package]
+name = "fractal"
+version = "0.1.0"
+authors = ["Raphaël Thériault <raphael_theriault@outlook.com>"]
+edition = "2018"
+description = "A multithreaded yet poorly optimised fractal renderer"
+license = "MIT"
+
+[dependencies]
+image = "0.23.9"
+ndarray = { version = "0.13.1", features = ["rayon"] }
+num-complex = { version = "0.3.0", features = ["std"], default-features = false }
+num-traits = { version = "0.2.12", features = ["std"], default-features = false }
+palette = { version = "0.5.0", features = ["std"], default-features = false }
+paw = "1.0.0"
+rayon = "1.4.0"
+structopt = { version = "0.3.17", features = ["paw"] }
+thiserror = "1.0.20"
