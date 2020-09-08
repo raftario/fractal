@@ -11,7 +11,6 @@ use notify::{RecursiveMode, Watcher};
 use num_complex::Complex64;
 use sdl2::{
     event::{Event, WindowEvent},
-    keyboard::Keycode,
     render::WindowCanvas,
 };
 use std::{
@@ -68,20 +67,20 @@ fn main(args: Opt) -> Result<()> {
     )?;
     let mut events = ctx.event_pump().map_err(Error::msg)?;
 
-    let canvas_dimensions = (
-        config.preview.resolution.width as f64,
-        config.preview.resolution.height as f64,
-    );
     let (mut fractal_dimensions, mut fractal_offsets) = {
-        if canvas_dimensions.0 / canvas_dimensions.1 >= 3.5 / 2.0 {
-            let width = 2.0 * canvas_dimensions.0 / canvas_dimensions.1;
+        if config.preview.resolution.width as f64 / config.preview.resolution.height as f64
+            >= 3.5 / 2.0
+        {
+            let width = 2.0 * config.preview.resolution.width as f64
+                / config.preview.resolution.height as f64;
             ((width, 2.0), (-2.5 + (3.5 - width) / 2.0, -1.0))
         } else {
-            let height = 3.5 * canvas_dimensions.1 / canvas_dimensions.0;
+            let height = 3.5 * config.preview.resolution.height as f64
+                / config.preview.resolution.width as f64;
             ((3.5, height), (-2.5, -1.0 + (1.0 - height) / 2.0))
         }
     };
-    let mut scale_factor = fractal_dimensions.0 / canvas_dimensions.0;
+    let mut scale_factor = fractal_dimensions.0 / config.preview.resolution.width as f64;
 
     preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
     loop {
@@ -90,7 +89,25 @@ fn main(args: Opt) -> Result<()> {
                 Ok(_) => match self::config::read(&args.config) {
                     Ok(c) => {
                         eprintln!("[CONFIG] Refreshed");
+
+                        scale_factor = scale(
+                            scale_factor,
+                            (
+                                config.preview.resolution.width as f64,
+                                config.preview.resolution.height as f64,
+                            ),
+                            (
+                                c.preview.resolution.width as f64,
+                                c.preview.resolution.height as f64,
+                            ),
+                        );
                         config = c;
+                        canvas.set_logical_size(
+                            config.preview.resolution.width as _,
+                            config.preview.resolution.height as _,
+                        )?;
+
+                        preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
                     }
                     Err(e) => eprintln!("[CONFIG] {}", e),
                 },
@@ -126,7 +143,7 @@ fn main(args: Opt) -> Result<()> {
                 fractal_offsets.0 = old_center.0 - new_center.0;
                 fractal_offsets.1 = old_center.1 - new_center.1;
 
-                scale_factor = fractal_dimensions.0 / canvas_dimensions.0;
+                scale_factor = fractal_dimensions.0 / config.preview.resolution.width as f64;
                 preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
             }
             Some(Event::KeyUp {
@@ -144,7 +161,7 @@ fn main(args: Opt) -> Result<()> {
                 fractal_offsets.0 = old_center.0 - new_center.0;
                 fractal_offsets.1 = old_center.1 - new_center.1;
 
-                scale_factor = fractal_dimensions.0 / canvas_dimensions.0;
+                scale_factor = fractal_dimensions.0 / config.preview.resolution.width as f64;
                 preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
             }
 
@@ -217,6 +234,15 @@ fn preview(
     Ok(())
 }
 
+fn scale(mut factor: f64, old: (f64, f64), new: (f64, f64)) -> f64 {
+    if new.0 / new.1 > old.0 / old.1 {
+        factor *= old.0 / new.0;
+    } else {
+        factor *= old.1 / new.1;
+    }
+    factor
+}
+
 fn render(scale_factor: f64, offsets: (f64, f64), config: Config) {
     println!("[RENDER] Started rendering");
     thread::spawn(move || match render_inner(scale_factor, offsets, config) {
@@ -226,20 +252,17 @@ fn render(scale_factor: f64, offsets: (f64, f64), config: Config) {
 }
 
 fn render_inner(mut scale_factor: f64, offsets: (f64, f64), config: Config) -> Result<PathBuf> {
-    let (render_width, render_height) = (
-        config.render.resolution.width as f64,
-        config.render.resolution.height as f64,
+    scale_factor = scale(
+        scale_factor,
+        (
+            config.preview.resolution.width as f64,
+            config.preview.resolution.height as f64,
+        ),
+        (
+            config.render.resolution.width as f64,
+            config.render.resolution.height as f64,
+        ),
     );
-    let (preview_width, preview_height) = (
-        config.preview.resolution.width as f64,
-        config.preview.resolution.height as f64,
-    );
-
-    if render_width / render_height > preview_width / preview_height {
-        scale_factor *= preview_width / render_width;
-    } else {
-        scale_factor *= preview_height / render_height;
-    }
 
     let timestamp = Local::now();
     let filename = format!("{}.png", timestamp.format("%Y-%m-%d_%H-%M-%S"));
