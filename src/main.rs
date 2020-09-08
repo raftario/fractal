@@ -1,151 +1,275 @@
+mod colour;
+mod config;
 mod mandelbrot;
 
-use self::mandelbrot::Area;
-use palette::{Gradient, LinSrgb};
-use std::{path::PathBuf, str::FromStr};
+use self::{colour::Colour, config::Config};
+use anyhow::{Error, Result};
+use chrono::Local;
+use image::RgbImage;
+use ndarray::{Array2, Zip};
+use notify::{RecursiveMode, Watcher};
+use num_complex::Complex64;
+use sdl2::{
+    event::{Event, WindowEvent},
+    keyboard::Keycode,
+    render::WindowCanvas,
+};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::mpsc::{self, TryRecvError},
+    thread,
+    time::Duration,
+};
 use structopt::StructOpt;
-use thiserror::Error;
 
 #[derive(StructOpt)]
 #[structopt(about, author)]
-enum Opt {
-    /// Renders the Mandelbrot set
-    Mandelbrot {
-        /// Width of the output image in pixels
-        #[structopt(name = "WIDTH")]
-        width: usize,
-        /// Height of the output image in pixels
-        #[structopt(name = "HEIGHT")]
-        height: usize,
-        /// Filename of the output image (the format will be determined by the extension)
-        #[structopt(name = "OUTPUT")]
-        output: PathBuf,
-
-        /// Leftmost rendered point on the X axis
-        #[structopt(
-            short = "x",
-            long,
-            name = "x",
-            default_value = "-2.5",
-            display_order = 0
-        )]
-        x_start: f64,
-        /// Rightmost rendered point on the X axis
-        #[structopt(
-            short = "X",
-            long,
-            name = "X",
-            default_value = "1.0",
-            display_order = 1
-        )]
-        x_end: f64,
-        /// Leftmost rendered point on the Y axis
-        #[structopt(
-            short = "y",
-            long,
-            name = "y",
-            default_value = "-1.0",
-            display_order = 2
-        )]
-        y_start: f64,
-        /// Rightmost rendered point on the Y axis
-        #[structopt(
-            short = "Y",
-            long,
-            name = "Y",
-            default_value = "1.0",
-            display_order = 3
-        )]
-        y_end: f64,
-
-        /// Maximum number of iterations to go through before considering a point is part of the set
-        #[structopt(
-            short = "n",
-            long,
-            name = "ITERS",
-            default_value = "1000",
-            display_order = 4
-        )]
-        max_iterations: usize,
-        /// RGB colour gradient
-        #[structopt(
-            short,
-            long,
-            name = "COLOURS",
-            default_value = "#050a3c #8c2846 #f0c83c #050a3c",
-            display_order = 5
-        )]
-        gradient: OptGradient,
-    },
-}
-
-struct OptGradient(Gradient<LinSrgb>);
-
-#[derive(Debug, Error)]
-enum OptGradientFromStrError {
-    #[error("{0}")]
-    Custom(&'static str),
-    #[error("invalid red value: {0}")]
-    Red(std::num::ParseIntError),
-    #[error("invalid green value: {0}")]
-    Green(std::num::ParseIntError),
-    #[error("invalid blue value: {0}")]
-    Blue(std::num::ParseIntError),
-}
-
-impl FromStr for OptGradient {
-    type Err = OptGradientFromStrError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let colours = s
-            .split(' ')
-            .map(|mut s| {
-                s = s.trim();
-                if !s.starts_with('#') || s.len() != 7 {
-                    return Err(OptGradientFromStrError::Custom(
-                        "colors must be in the `#rrggbb` format",
-                    ));
-                }
-
-                let r = u8::from_str_radix(&s[1..3], 16).map_err(OptGradientFromStrError::Red)?;
-                let g = u8::from_str_radix(&s[3..5], 16).map_err(OptGradientFromStrError::Green)?;
-                let b = u8::from_str_radix(&s[5..7], 16).map_err(OptGradientFromStrError::Blue)?;
-
-                Ok(LinSrgb::new(
-                    r as f32 / 255.0,
-                    g as f32 / 255.0,
-                    b as f32 / 255.0,
-                ))
-            })
-            .collect::<Result<Vec<LinSrgb>, Self::Err>>()?;
-        Ok(Self(Gradient::new(colours)))
-    }
+struct Opt {
+    /// File to load the configuration from
+    #[structopt(name = "FILE", default_value = "fractal.toml", env = "FRACTAL_CONFIG")]
+    config: PathBuf,
 }
 
 #[paw::main]
-fn main(args: Opt) -> image::ImageResult<()> {
-    match args {
-        Opt::Mandelbrot {
-            width,
-            height,
-            output,
-            x_start,
-            x_end,
-            y_start,
-            y_end,
-            max_iterations,
-            gradient,
-        } => {
-            let area = Area {
-                x_start,
-                x_end,
-                y_start,
-                y_end,
-            };
-            let gradient = gradient.0;
-            let image =
-                self::mandelbrot::mandelbrot(width, height, &area, max_iterations, &gradient);
-            image.save(output)
+fn main(args: Opt) -> Result<()> {
+    let (mut config, config_rx, _w) = if fs::metadata(&args.config).is_ok() {
+        println!(
+            "[CONFIG] Using {}, refreshing enabled",
+            args.config.display()
+        );
+        let c = self::config::read(&args.config)?;
+        let (tx, rx) = mpsc::channel();
+        let mut watcher = notify::watcher(tx, Duration::from_secs(2))?;
+        watcher.watch(&args.config, RecursiveMode::NonRecursive)?;
+        (c, Some(rx), Some(watcher))
+    } else {
+        println!("[CONFIG] Using default, refreshing disabled");
+        (Default::default(), None, None)
+    };
+
+    let ctx = sdl2::init().map_err(Error::msg)?;
+    let video = ctx.video().map_err(Error::msg)?;
+    let window = video
+        .window(
+            env!("CARGO_PKG_NAME"),
+            config.preview.resolution.width as _,
+            config.preview.resolution.height as _,
+        )
+        .position_centered()
+        .resizable()
+        .allow_highdpi()
+        .build()?;
+
+    let mut canvas = window.into_canvas().build()?;
+    canvas.set_logical_size(
+        config.preview.resolution.width as _,
+        config.preview.resolution.height as _,
+    )?;
+    let mut events = ctx.event_pump().map_err(Error::msg)?;
+
+    let canvas_dimensions = (
+        config.preview.resolution.width as f64,
+        config.preview.resolution.height as f64,
+    );
+    let (mut fractal_dimensions, mut fractal_offsets) = {
+        if canvas_dimensions.0 / canvas_dimensions.1 >= 3.5 / 2.0 {
+            let width = 2.0 * canvas_dimensions.0 / canvas_dimensions.1;
+            ((width, 2.0), (-2.5 + (3.5 - width) / 2.0, -1.0))
+        } else {
+            let height = 3.5 * canvas_dimensions.1 / canvas_dimensions.0;
+            ((3.5, height), (-2.5, -1.0 + (1.0 - height) / 2.0))
+        }
+    };
+    let mut scale_factor = fractal_dimensions.0 / canvas_dimensions.0;
+
+    preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
+    loop {
+        if let Some(rx) = &config_rx {
+            match rx.try_recv() {
+                Ok(_) => match self::config::read(&args.config) {
+                    Ok(c) => {
+                        eprintln!("[CONFIG] Refreshed");
+                        config = c;
+                    }
+                    Err(e) => eprintln!("[CONFIG] {}", e),
+                },
+                Err(TryRecvError::Disconnected) => break,
+                _ => (),
+            }
+        }
+
+        match events.wait_event_timeout(2000) {
+            Some(Event::Quit { .. }) => break,
+
+            Some(Event::Window {
+                win_event: WindowEvent::Resized(_, _),
+                ..
+            })
+            | Some(Event::Window {
+                win_event: WindowEvent::SizeChanged(_, _),
+                ..
+            }) => preview(scale_factor, fractal_offsets, &mut canvas, &config)?,
+
+            Some(Event::KeyUp {
+                keycode: Some(k), ..
+            }) if config.preview.keys.zoom_in == k => {
+                let old_center = (
+                    fractal_dimensions.0 / 2.0 + fractal_offsets.0,
+                    fractal_dimensions.1 / 2.0 + fractal_offsets.1,
+                );
+
+                fractal_dimensions.0 /= config.preview.zoom_factor;
+                fractal_dimensions.1 /= config.preview.zoom_factor;
+
+                let new_center = (fractal_dimensions.0 / 2.0, fractal_dimensions.1 / 2.0);
+                fractal_offsets.0 = old_center.0 - new_center.0;
+                fractal_offsets.1 = old_center.1 - new_center.1;
+
+                scale_factor = fractal_dimensions.0 / canvas_dimensions.0;
+                preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
+            }
+            Some(Event::KeyUp {
+                keycode: Some(k), ..
+            }) if config.preview.keys.zoom_out == k => {
+                let old_center = (
+                    fractal_dimensions.0 / 2.0 + fractal_offsets.0,
+                    fractal_dimensions.1 / 2.0 + fractal_offsets.1,
+                );
+
+                fractal_dimensions.0 *= config.preview.zoom_factor;
+                fractal_dimensions.1 *= config.preview.zoom_factor;
+
+                let new_center = (fractal_dimensions.0 / 2.0, fractal_dimensions.1 / 2.0);
+                fractal_offsets.0 = old_center.0 - new_center.0;
+                fractal_offsets.1 = old_center.1 - new_center.1;
+
+                scale_factor = fractal_dimensions.0 / canvas_dimensions.0;
+                preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
+            }
+
+            Some(Event::KeyUp {
+                keycode: Some(k), ..
+            }) if config.preview.keys.up == k => {
+                fractal_offsets.1 -= fractal_dimensions.1 * config.preview.move_factor;
+                preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
+            }
+            Some(Event::KeyUp {
+                keycode: Some(k), ..
+            }) if config.preview.keys.left == k => {
+                fractal_offsets.0 -= fractal_dimensions.0 * config.preview.move_factor;
+                preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
+            }
+            Some(Event::KeyUp {
+                keycode: Some(k), ..
+            }) if config.preview.keys.down == k => {
+                fractal_offsets.1 += fractal_dimensions.1 * config.preview.move_factor;
+                preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
+            }
+            Some(Event::KeyUp {
+                keycode: Some(k), ..
+            }) if config.preview.keys.right == k => {
+                fractal_offsets.0 += fractal_dimensions.0 * config.preview.move_factor;
+                preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
+            }
+
+            Some(Event::KeyUp {
+                keycode: Some(k), ..
+            }) if config.preview.keys.render == k => {
+                render(scale_factor, fractal_offsets, config.clone())
+            }
+
+            Some(Event::MouseButtonUp { x, y, .. }) => {
+                let x = x as f64 * scale_factor + fractal_offsets.0;
+                let y = y as f64 * scale_factor + fractal_offsets.1;
+                println!("[COORDS] ({}, {})", x, y);
+            }
+
+            _ => (),
         }
     }
+
+    Ok(())
+}
+
+fn preview(
+    scale_factor: f64,
+    offsets: (f64, f64),
+    canvas: &mut WindowCanvas,
+    config: &Config,
+) -> Result<()> {
+    let (x, y) = (
+        config.preview.resolution.width,
+        config.preview.resolution.height,
+    );
+    for x in 0..(x as i32) {
+        for y in 0..(y as i32) {
+            let c = Complex64::new(
+                x as f64 * scale_factor + offsets.0,
+                y as f64 * scale_factor + offsets.1,
+            );
+            let colour = self::mandelbrot::colourise(c, config.max_iterations, &config.gradient);
+            canvas.set_draw_color((colour.r, colour.g, colour.b));
+            canvas.draw_point((x, y)).map_err(Error::msg)?;
+        }
+    }
+    canvas.present();
+    Ok(())
+}
+
+fn render(scale_factor: f64, offsets: (f64, f64), config: Config) {
+    println!("[RENDER] Started rendering");
+    thread::spawn(move || match render_inner(scale_factor, offsets, config) {
+        Ok(p) => println!("[RENDER] Done rendering {}", p.display()),
+        Err(e) => eprintln!("[RENDER] {}", e),
+    });
+}
+
+fn render_inner(mut scale_factor: f64, offsets: (f64, f64), config: Config) -> Result<PathBuf> {
+    let (render_width, render_height) = (
+        config.render.resolution.width as f64,
+        config.render.resolution.height as f64,
+    );
+    let (preview_width, preview_height) = (
+        config.preview.resolution.width as f64,
+        config.preview.resolution.height as f64,
+    );
+
+    if render_width / render_height > preview_width / preview_height {
+        scale_factor *= preview_width / render_width;
+    } else {
+        scale_factor *= preview_height / render_height;
+    }
+
+    let timestamp = Local::now();
+    let filename = format!("{}.png", timestamp.format("%Y-%m-%d_%H-%M-%S"));
+    let filepath = config.render.directory.join(filename);
+
+    fs::create_dir_all(&config.render.directory)?;
+
+    let (width, height) = (
+        config.render.resolution.width,
+        config.render.resolution.height,
+    );
+    let mut matrix: Array2<Colour> =
+        Array2::from_elem((width, height), Colour { r: 0, g: 0, b: 0 });
+    Zip::indexed(&mut matrix).par_apply(|(x, y), colour| {
+        let c = Complex64::new(
+            x as f64 * scale_factor + offsets.0,
+            y as f64 * scale_factor + offsets.1,
+        );
+        *colour = self::mandelbrot::colourise(c, config.max_iterations, &config.gradient);
+    });
+
+    let mut image = RgbImage::new(width as _, height as _);
+    for (x, y, colour) in image.enumerate_pixels_mut() {
+        let c = matrix[[x as _, y as _]];
+        colour[0] = c.r;
+        colour[1] = c.g;
+        colour[2] = c.b;
+    }
+
+    image.save(&filepath)?;
+
+    Ok(filepath)
 }

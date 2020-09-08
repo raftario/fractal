@@ -3,16 +3,21 @@ name = "fractal"
 version = "0.1.0"
 authors = ["Raphaël Thériault <raphael_theriault@outlook.com>"]
 edition = "2018"
-description = "A multithreaded yet poorly optimised fractal renderer"
+description = "A fairly simple fractal renderer"
 license = "MIT"
 
 [dependencies]
-image = "0.23.9"
+anyhow = "1.0.32"
+chrono = "0.4.15"
+image = { version = "0.23.9", features = ["png"], default-features = false }
 ndarray = { version = "0.13.1", features = ["rayon"] }
+notify = "4.0.15"
 num-complex = { version = "0.3.0", features = ["std"], default-features = false }
 num-traits = { version = "0.2.12", features = ["std"], default-features = false }
 palette = { version = "0.5.0", features = ["std"], default-features = false }
 paw = "1.0.0"
 rayon = "1.4.0"
+sdl2 = { version = "0.34.3", features = ["bundled"] }
+serde = { version = "1.0.115", features = ["derive"] }
 structopt = { version = "0.3.17", features = ["paw"] }
-thiserror = "1.0.20"
+toml = "0.5.6"
