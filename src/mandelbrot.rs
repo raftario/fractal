@@ -25,7 +25,7 @@ fn diverge_iterations(c: Complex64, max: usize) -> (usize, Complex64) {
 }
 
 fn colour_scalar(i: usize, z: Complex64, max: usize) -> f64 {
-    let log_zn = z.norm_sqr().log10();
+    let log_zn = z.norm_sqr().log10() / 2f64;
     let nu = (log_zn / 2f64.log10()).log10() / 2f64.log10();
     (i as f64 + 1f64 - nu) / max as f64
 }
