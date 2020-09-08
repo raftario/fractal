@@ -1,6 +1,6 @@
 use palette::{FromColor, IntoColor, LinSrgb};
 use serde::de::{Deserialize, Deserializer, Error as _, MapAccess, Visitor};
-use std::{convert::TryFrom, fmt};
+use std::{convert::TryFrom, fmt, num::NonZeroUsize};
 
 #[derive(Debug, Copy, Clone, serde::Deserialize)]
 #[serde(try_from = "&str")]
@@ -92,6 +92,7 @@ impl<'de> Deserialize<'de> for Gradient {
         enum Field {
             Mode,
             Colours,
+            Cycles,
         }
 
         #[derive(serde::Deserialize)]
@@ -116,6 +117,7 @@ impl<'de> Deserialize<'de> for Gradient {
             {
                 let mut mode = None;
                 let mut colours: Option<Vec<Colour>> = None;
+                let mut cycles: Option<NonZeroUsize> = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
@@ -133,13 +135,26 @@ impl<'de> Deserialize<'de> for Gradient {
                             }
                             colours = Some(map.next_value()?);
                         }
+                        Field::Cycles => {
+                            if cycles.is_some() {
+                                return Err(<A as MapAccess<'de>>::Error::duplicate_field(
+                                    "cycles",
+                                ));
+                            }
+                            cycles = Some(map.next_value()?);
+                        }
                     }
                 }
 
                 let mode = mode.unwrap_or(Mode::Rgb);
-                let colours = colours
+                let base_colours = colours
                     .ok_or_else(|| <A as MapAccess<'de>>::Error::missing_field("colours"))?;
+                let cycles = cycles.map_or(1, NonZeroUsize::get);
 
+                let mut colours = Vec::with_capacity(base_colours.len() * cycles);
+                for _ in 0..cycles {
+                    colours.extend_from_slice(&base_colours);
+                }
                 let lin_srgb = colours.into_iter().map(<LinSrgb<f64>>::from);
 
                 match mode {
@@ -151,7 +166,7 @@ impl<'de> Deserialize<'de> for Gradient {
             }
         }
 
-        const FIELDS: &[&str] = &["mode", "colours"];
+        const FIELDS: &[&str] = &["mode", "colours", "cycles"];
         deserializer.deserialize_struct("Gradient", FIELDS, GradientVisitor)
     }
 }

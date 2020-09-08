@@ -52,4 +52,6 @@ colours = [
     "#f0c83c",
     "#050a3c",
 ]
+# Number of times the gradient cycles
+cycles = 1
 ```
