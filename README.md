@@ -44,13 +44,12 @@ height = 2160 # Vertical pixels in the rendered images
 directory = "renders" # Relative or absolute path to a directory where renders will be saved, will be created if it doesn't exist
 
 [gradient]
-mode = "RGB" # Gradient mode, either RGB or HSV
+mode = "HSV" # Gradient mode, either RGB or HSV
 # Colours in #rrggbb format (no, "colors" won't be recognised)
 colours = [
-    "#050a3c",
-    "#8c2846",
-    "#f0c83c",
-    "#050a3c",
+    "#dd2222",
+    "#22dd22",
+    "#2222dd",
 ]
 # Number of times the gradient cycles
 cycles = 1

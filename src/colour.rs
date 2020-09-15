@@ -60,24 +60,28 @@ impl TryFrom<&str> for Colour {
 
 impl Default for Gradient {
     fn default() -> Self {
-        Self::Rgb(palette::Gradient::new(
+        Self::Hsv(palette::Gradient::new(
             [
-                Colour { r: 5, g: 10, b: 60 },
                 Colour {
-                    r: 140,
-                    g: 40,
-                    b: 70,
+                    r: 0xdd,
+                    g: 0x22,
+                    b: 0x22,
                 },
                 Colour {
-                    r: 240,
-                    g: 200,
-                    b: 60,
+                    r: 0x22,
+                    g: 0xdd,
+                    b: 0x22,
                 },
-                Colour { r: 5, g: 10, b: 60 },
+                Colour {
+                    r: 0x22,
+                    g: 0x22,
+                    b: 0xdd,
+                },
             ]
             .iter()
             .copied()
-            .map(<LinSrgb<f64>>::from),
+            .map(<LinSrgb<f64>>::from)
+            .map(FromColor::from_rgb),
         ))
     }
 }
