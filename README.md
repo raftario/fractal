@@ -15,7 +15,13 @@ A fairly simple fractal renderer
 
 ## Usage
 
-Just launch the binary. A custom config file in TOML format can optionally be provided as the first argument, otherwise the defaults listed below will be used.
+To use the default configuration listed below, just start the program.
+
+A custom configuration can be provided to override the defaults by providing the config file as the first argument to the program (this can be done by just drag-and-dropping the file onto the program).
+
+It is not necessary to provide all options, the defaults will be used for any missing values.
+
+The program supports config hot reloading, which means changes to the config file will be applied in real time when they are saved to disk.
 
 ## Configuration
 
