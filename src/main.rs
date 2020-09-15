@@ -5,16 +5,17 @@ mod mandelbrot;
 use self::{colour::Colour, config::Config};
 use anyhow::{Error, Result};
 use chrono::Local;
-use image::RgbImage;
 use ndarray::{Array2, Zip};
 use notify::{RecursiveMode, Watcher};
 use num_complex::Complex64;
+use png::{BitDepth, ColorType, Encoder};
 use sdl2::{
     event::{Event, WindowEvent},
     render::WindowCanvas,
 };
 use std::{
-    fs,
+    fs::{self, File},
+    io::{BufWriter, Write},
     path::PathBuf,
     sync::mpsc::{self, TryRecvError},
     thread,
@@ -284,15 +285,22 @@ fn render_inner(mut scale_factor: f64, offsets: (f64, f64), config: Config) -> R
         *colour = self::mandelbrot::colourise(c, config.max_iterations, &config.gradient);
     });
 
-    let mut image = RgbImage::new(width as _, height as _);
-    for (x, y, colour) in image.enumerate_pixels_mut() {
-        let c = matrix[[x as _, y as _]];
-        colour[0] = c.r;
-        colour[1] = c.g;
-        colour[2] = c.b;
+    let mut encoder = Encoder::new(
+        BufWriter::new(File::create(&filepath)?),
+        width as _,
+        height as _,
+    );
+    encoder.set_color(ColorType::RGB);
+    encoder.set_depth(BitDepth::Eight);
+    let mut writer = encoder.write_header()?.into_stream_writer();
+
+    for y in 0..height {
+        for x in 0..width {
+            let colour = matrix[[x, y]];
+            writer.write_all(&[colour.r, colour.g, colour.b])?;
+        }
     }
 
-    image.save(&filepath)?;
-
+    writer.finish()?;
     Ok(filepath)
 }

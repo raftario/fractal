@@ -9,7 +9,6 @@ license = "MIT"
 [dependencies]
 anyhow = "1.0.32"
 chrono = "0.4.15"
-image = { version = "0.23.9", features = ["png"], default-features = false }
 ndarray = { version = "0.13.1", features = ["rayon"] }
 notify = "4.0.15"
 num-complex = { version = "0.3.0", features = ["std"], default-features = false }
@@ -18,6 +17,7 @@ palette = { version = "0.5.0", features = ["std"], default-features = false }
 paw = "1.0.0"
 rayon = "1.4.0"
 sdl2 = { version = "0.34.3", features = ["bundled", "static-link"] }
-serde = { version = "1.0.115", features = ["derive"] }
+serde = { version = "1.0.116", features = ["derive"] }
 structopt = { version = "0.3.17", features = ["paw"] }
 toml = "0.5.6"
+png = "0.16.7"
