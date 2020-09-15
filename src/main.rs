@@ -31,11 +31,18 @@ struct Opt {
     config: PathBuf,
 }
 
+macro_rules! now {
+    () => {
+        Local::now().format("%H:%M:%S%.6f")
+    };
+}
+
 #[paw::main]
 fn main(args: Opt) -> Result<()> {
     let (mut config, config_rx, _w) = if fs::metadata(&args.config).is_ok() {
         println!(
-            "[CONFIG] Using {}, refreshing enabled",
+            "[{}] [CONFIG] Using {}, refreshing enabled",
+            now!(),
             args.config.display()
         );
         let c = self::config::read(&args.config)?;
@@ -44,7 +51,7 @@ fn main(args: Opt) -> Result<()> {
         watcher.watch(&args.config, RecursiveMode::NonRecursive)?;
         (c, Some(rx), Some(watcher))
     } else {
-        println!("[CONFIG] Using default, refreshing disabled");
+        println!("[{}] [CONFIG] Using default, refreshing disabled", now!());
         (Default::default(), None, None)
     };
 
@@ -89,7 +96,7 @@ fn main(args: Opt) -> Result<()> {
             match rx.try_recv() {
                 Ok(_) => match self::config::read(&args.config) {
                     Ok(c) => {
-                        eprintln!("[CONFIG] Refreshed");
+                        eprintln!("[{}] [CONFIG] Refreshed", now!());
 
                         scale_factor = scale(
                             scale_factor,
@@ -110,7 +117,7 @@ fn main(args: Opt) -> Result<()> {
 
                         preview(scale_factor, fractal_offsets, &mut canvas, &config)?;
                     }
-                    Err(e) => eprintln!("[CONFIG] {}", e),
+                    Err(e) => eprintln!("[{}] [CONFIG] [ERROR] {}", now!(), e),
                 },
                 Err(TryRecvError::Disconnected) => break,
                 _ => (),
@@ -200,7 +207,7 @@ fn main(args: Opt) -> Result<()> {
             Some(Event::MouseButtonUp { x, y, .. }) => {
                 let x = x as f64 * scale_factor + fractal_offsets.0;
                 let y = y as f64 * scale_factor + fractal_offsets.1;
-                println!("[COORDS] ({}, {})", x, y);
+                println!("[{}] [COORDS] ({}, {})", now!(), x, y);
             }
 
             _ => (),
@@ -245,10 +252,10 @@ fn scale(mut factor: f64, old: (f64, f64), new: (f64, f64)) -> f64 {
 }
 
 fn render(scale_factor: f64, offsets: (f64, f64), config: Config) {
-    println!("[RENDER] Started rendering");
+    println!("[{}] [RENDER] Started rendering", now!());
     thread::spawn(move || match render_inner(scale_factor, offsets, config) {
-        Ok(p) => println!("[RENDER] Done rendering {}", p.display()),
-        Err(e) => eprintln!("[RENDER] {}", e),
+        Ok(p) => println!("[{}] [RENDER] Done rendering {}", now!(), p.display()),
+        Err(e) => eprintln!("[{}] [RENDER] [ERROR] {}", now!(), e),
     });
 }
 
