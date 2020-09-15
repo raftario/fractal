@@ -1,4 +1,4 @@
-use crate::colour::Gradient;
+use crate::colour::{Colour, Gradient};
 use anyhow::Result;
 use sdl2::keyboard::Keycode;
 use serde::Deserialize;
@@ -21,6 +21,7 @@ pub struct Config {
     pub preview: PreviewConfig,
     pub render: RenderConfig,
     pub gradient: Gradient,
+    pub black: Colour,
 }
 
 #[derive(Debug, Copy, Clone, Deserialize)]
@@ -71,6 +72,11 @@ impl Default for Config {
             preview: Default::default(),
             render: Default::default(),
             gradient: Default::default(),
+            black: Colour {
+                r: 0x00,
+                g: 0x00,
+                b: 0x00,
+            },
         }
     }
 }

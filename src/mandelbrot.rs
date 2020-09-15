@@ -30,12 +30,12 @@ fn colour_scalar(i: usize, z: Complex64, max: usize) -> f64 {
     (i as f64 + 1f64 - nu) / max as f64
 }
 
-pub fn colourise(c: Complex64, max: usize, gradient: &Gradient) -> Colour {
+pub fn colourise(c: Complex64, max: usize, gradient: &Gradient, black: Colour) -> Colour {
     let (i, z) = diverge_iterations(c, max);
     if i < max {
         let scalar = colour_scalar(i, z, max);
         gradient.get(scalar)
     } else {
-        Colour { r: 0, g: 0, b: 0 }
+        black
     }
 }

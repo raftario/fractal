@@ -27,6 +27,7 @@ The program supports config hot reloading, which means changes to the config fil
 
 ```toml
 max-iterations = 512 # Maximum iterations of f to run before deducing a value is part of the Mandelbrot set
+black = "#000000" # Colour of the points part of the set in #rrggbb format
 
 [preview]
 width = 320 # Logical horizontal pixels in the preview window

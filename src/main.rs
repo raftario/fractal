@@ -233,7 +233,12 @@ fn preview(
                 x as f64 * scale_factor + offsets.0,
                 y as f64 * scale_factor + offsets.1,
             );
-            let colour = self::mandelbrot::colourise(c, config.max_iterations, &config.gradient);
+            let colour = self::mandelbrot::colourise(
+                c,
+                config.max_iterations,
+                &config.gradient,
+                config.black,
+            );
             canvas.set_draw_color((colour.r, colour.g, colour.b));
             canvas.draw_point((x, y)).map_err(Error::msg)?;
         }
@@ -289,7 +294,8 @@ fn render_inner(mut scale_factor: f64, offsets: (f64, f64), config: Config) -> R
             x as f64 * scale_factor + offsets.0,
             y as f64 * scale_factor + offsets.1,
         );
-        *colour = self::mandelbrot::colourise(c, config.max_iterations, &config.gradient);
+        *colour =
+            self::mandelbrot::colourise(c, config.max_iterations, &config.gradient, config.black);
     });
 
     let mut encoder = Encoder::new(
